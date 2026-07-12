@@ -1,0 +1,55 @@
+services:
+  database:
+    image: postgres:17-alpine
+    container_name: kanboard-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secure_prod_password
+      POSTGRES_DB: kanboard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - kanboard-net
+
+  backend:
+    build:
+      context: ./server
+    container_name: kanboard-backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://postgres:secure_prod_password@database:5432/kanboard
+      JWT_SECRET: super_secret_kanboard_jwt_token_key_123
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      PORT: 5050
+      CLIENT_URL: http://localhost # Caddy will handle proxying, so this defaults to the root URL
+    depends_on:
+      - database
+    networks:
+      - kanboard-net
+
+  webserver:
+    image: caddy:2-alpine
+    container_name: caddy-webserver
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./dist:/usr/share/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    networks:
+      - kanboard-net
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  kanboard-net:
+    driver: bridge
