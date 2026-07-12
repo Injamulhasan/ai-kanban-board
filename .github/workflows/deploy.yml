@@ -1,0 +1,58 @@
+name: Deploy Kanboard to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build Frontend Assets
+        env:
+          VITE_API_URL: http://${{ secrets.VM_PUBLIC_IP }}/api
+          VITE_SOCKET_URL: http://${{ secrets.VM_PUBLIC_IP }}
+        run: npm run build
+
+      - name: Create Deploy Zip
+        run: zip -r deploy.zip server/src server/package.json server/package-lock.json server/Dockerfile dist docker-compose.prod.yml Caddyfile
+
+      - name: Copy Files to Azure VM via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_PUBLIC_IP }}
+          username: kanboard
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy.zip"
+          target: "~/kanboard/"
+
+      - name: Execute Deploy Commands on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_PUBLIC_IP }}
+          username: kanboard
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/kanboard
+            # Extract new deployment archive
+            unzip -o deploy.zip && rm deploy.zip
+            
+            # Reorganize directory structure for docker-compose context
+            mkdir -p server && mv src package.json package-lock.json Dockerfile server/
+            
+            # Restart docker container services
+            docker compose -f docker-compose.prod.yml up -d --build
