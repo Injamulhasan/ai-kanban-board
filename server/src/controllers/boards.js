@@ -77,6 +77,7 @@ export const addMember = async (req, res, next) => {
       `${req.user.name} added ${member.name} to the board`
     );
     getIO().to(`board:${req.params.id}`).emit("activity:new", activity);
+    getIO().to(`board:${req.params.id}`).emit("member:added", member);
 
     res.status(201).json({ member });
   } catch (err) {
@@ -93,6 +94,7 @@ export const removeMember = async (req, res, next) => {
       `${req.user.name} removed a member from the board`
     );
     getIO().to(`board:${req.params.id}`).emit("activity:new", activity);
+    getIO().to(`board:${req.params.id}`).emit("member:removed", { userId: req.params.userId });
 
     res.json(result);
   } catch (err) {

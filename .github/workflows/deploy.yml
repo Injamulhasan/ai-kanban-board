@@ -22,10 +22,12 @@ jobs:
       - name: Install Frontend Dependencies
         run: npm ci
 
+      - name: Create Production Env File
+        run: |
+          echo "VITE_API_URL=http://${{ secrets.VM_PUBLIC_IP }}/api" > .env.production
+          echo "VITE_SOCKET_URL=http://${{ secrets.VM_PUBLIC_IP }}" >> .env.production
+
       - name: Build Frontend Assets
-        env:
-          VITE_API_URL: http://${{ secrets.VM_PUBLIC_IP }}/api
-          VITE_SOCKET_URL: http://${{ secrets.VM_PUBLIC_IP }}
         run: npm run build
 
       - name: Create Deploy Zip

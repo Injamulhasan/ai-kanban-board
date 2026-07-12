@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Sparkles, FileText, Users, Activity, Search, ChevronLeft } from "lucide-react";
+import { Sparkles, FileText, Users, Activity, Search, ChevronLeft, Trash2 } from "lucide-react";
 import { useBoard } from "../hooks/useBoard";
 import { useLayout } from "../components/layout/AppLayout";
+import { useBoards } from "../context/BoardsContext";
 import { aiApi } from "../lib/api";
 import { PRIORITIES } from "../lib/utils";
 
@@ -24,6 +25,8 @@ const BoardPage = () => {
   const { boardId } = useParams();
   const { openCreateBoard } = useLayout();
   const b = useBoard(boardId);
+  const { remove: deleteBoardFromContext } = useBoards();
+  const navigate = useNavigate();
 
   const [taskModal, setTaskModal] = useState({ open: false, task: null, columnId: null });
   const [aiGen, setAiGen] = useState({ open: false, columnId: null });
@@ -66,6 +69,21 @@ const BoardPage = () => {
     }
   };
 
+  const handleDeleteBoard = async () => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this board? This action is permanent and cannot be undone."
+    );
+    if (confirmDelete) {
+      try {
+        await deleteBoardFromContext(boardId);
+        toast.success("Board deleted successfully");
+        navigate("/dashboard");
+      } catch (err) {
+        toast.error(err.message || "Failed to delete board");
+      }
+    }
+  };
+
   const canManage = b.role === "owner" || b.role === "admin";
 
   if (b.error) {
@@ -85,6 +103,17 @@ const BoardPage = () => {
           <span className="text-[11px] text-faint">Viewing</span>
           <AvatarStack users={b.presence} size="xs" max={3} />
         </div>
+      )}
+      {b.role === "owner" && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleDeleteBoard}
+          title="Delete Board"
+          className="text-red-500 hover:bg-red-500/10 hover:text-red-600"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       )}
       <Button size="sm" variant="ghost" onClick={() => setActivityOpen(true)} title="Activity">
         <Activity className="h-4 w-4" />

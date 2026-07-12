@@ -67,6 +67,8 @@ export const useBoard = (boardId) => {
       setColumns((p) => p.map((x) => (x.id === c.id ? c : x)).sort((a, b) => a.position - b.position));
     const onColDeleted = ({ id }) => setColumns((p) => p.filter((x) => x.id !== id));
     const onBoardUpdated = (b) => setBoard(b);
+    const onMemberAdded = (m) => setMembers((p) => p.find((x) => x.id === m.id) ? p : [...p, m]);
+    const onMemberRemoved = ({ userId }) => setMembers((p) => p.filter((x) => x.id !== userId));
     const onPresenceSync = ({ users }) => setPresence(users || []);
     const onPresenceJoin = ({ user }) =>
       setPresence((p) => (p.find((u) => u.id === user.id) ? p : [...p, user]));
@@ -80,6 +82,8 @@ export const useBoard = (boardId) => {
     socket.on("column:updated", onColUpdated);
     socket.on("column:deleted", onColDeleted);
     socket.on("board:updated", onBoardUpdated);
+    socket.on("member:added", onMemberAdded);
+    socket.on("member:removed", onMemberRemoved);
     socket.on("presence:sync", onPresenceSync);
     socket.on("presence:join", onPresenceJoin);
     socket.on("presence:leave", onPresenceLeave);
@@ -94,6 +98,8 @@ export const useBoard = (boardId) => {
       socket.off("column:updated", onColUpdated);
       socket.off("column:deleted", onColDeleted);
       socket.off("board:updated", onBoardUpdated);
+      socket.off("member:added", onMemberAdded);
+      socket.off("member:removed", onMemberRemoved);
       socket.off("presence:sync", onPresenceSync);
       socket.off("presence:join", onPresenceJoin);
       socket.off("presence:leave", onPresenceLeave);
