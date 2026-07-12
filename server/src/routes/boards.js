@@ -28,20 +28,8 @@ router.post("/:id/members", requireBoardMember, requireBoardAdmin, ctrl.addMembe
 router.delete("/:id/members/:userId", requireBoardMember, requireBoardAdmin, ctrl.removeMember);
 
 // Nested routes — columns, tasks, AI
-// Re-map :id → :boardId for nested routers
-router.use("/:id/columns", (req, _res, next) => {
-  req.params.boardId = req.params.id;
-  next();
-}, requireBoardMember, columnRoutes);
-
-router.use("/:id/tasks", (req, _res, next) => {
-  req.params.boardId = req.params.id;
-  next();
-}, requireBoardMember, taskRoutes);
-
-router.use("/:id/ai", (req, _res, next) => {
-  req.params.boardId = req.params.id;
-  next();
-}, requireBoardMember, aiRoutes);
+router.use("/:boardId/columns", requireBoardMember, columnRoutes);
+router.use("/:boardId/tasks", requireBoardMember, taskRoutes);
+router.use("/:boardId/ai", requireBoardMember, aiRoutes);
 
 export default router;
