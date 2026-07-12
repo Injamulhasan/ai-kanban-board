@@ -1,0 +1,81 @@
+# Kanboard — AI-Powered Kanban Board
+
+Kanboard is a production-ready, full-stack Kanban board featuring real-time collaboration, drag-and-drop task organization, presence tracking, and built-in AI helpers powered by Google Gemini.
+
+Designed with a premium, minimalist light aesthetic, Kanboard runs on a PERN stack (PostgreSQL, Express, React, Node) containerized via Docker and deployed on an Azure Virtual Machine.
+
+---
+
+## 🚀 Quick Start (Local Development)
+
+### Prerequisites
+*   Node.js (v20+)
+*   Docker & Docker Compose
+
+### Running the App
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/Injamulhasan/ai-kanban-board.git
+    cd ai-kanban-board
+    ```
+2.  **Start the Local PostgreSQL Database**:
+    ```bash
+    docker compose up -d
+    ```
+3.  **Set Up Environment Files**:
+    *   **Backend (`server/.env`)**:
+        ```env
+        DATABASE_URL=postgresql://postgres:postgres@localhost:5432/kanboard
+        JWT_SECRET=your-secret-key
+        GEMINI_API_KEY=your-gemini-api-key
+        PORT=5050
+        CLIENT_URL=http://localhost:5173
+        ```
+    *   **Frontend (`.env`)**:
+        ```env
+        VITE_API_URL=http://localhost:5050/api
+        VITE_SOCKET_URL=http://localhost:5050
+        ```
+4.  **Install Dependencies**:
+    *   Install root & frontend dependencies: `npm install`
+    *   Install backend dependencies: `npm install --prefix server`
+5.  **Seed the Database**:
+    ```bash
+    npm --prefix server run seed
+    ```
+6.  **Launch the Application**:
+    ```bash
+    npm run dev
+    ```
+    *This starts both the React frontend (on port 5173) and the Express backend (on port 5050) concurrently.*
+
+7.  **Log In**:
+    *   **Email**: `alex@kanboard.dev`
+    *   **Password**: `Test@1234`
+
+---
+
+## 📂 Project Directory Structure
+
+```
+ai-kanban-board/
+├── Caddyfile                   # Production web server config
+├── docker-compose.yml          # Local database compose configuration
+├── docker-compose.prod.yml     # Production full-stack compose configuration
+├── package.json                # Root frontend scripts & concurrently setup
+├── docs/                       # Developer documentation & system context
+│   ├── dev2deploy.md           # Detailed developer-to-deployment guide
+│   └── architecture.md         # System flows and architecture
+├── server/                     # Backend API Server
+│   ├── Dockerfile              # Production backend container build script
+│   ├── package.json            # Server script configurations & dependencies
+│   └── src/                    # Backend source code (Controllers, Services, Routes, DB)
+└── src/                        # Frontend source code (React Components, Hooks, Context)
+```
+
+---
+
+## 📘 Developer Resources
+
+*   For an in-depth understanding of the database schema, frontend-backend lifecycles, and network architecture, refer to the [System Architecture Document](file:///f:/personal-projects/ai-kanban-board/docs/architecture.md).
+*   For the complete history of technical challenges, fixes (e.g., Caddy 405 error, Express route merging issues), manual deployment scripts, and automated GitHub Actions guides, read the [Developer to Deployment Guide](file:///f:/personal-projects/ai-kanban-board/docs/dev2deploy.md).
