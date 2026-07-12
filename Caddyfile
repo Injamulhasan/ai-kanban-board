@@ -1,15 +1,19 @@
 # Listen on HTTP port 80 (since we have no domain name, SSL is disabled)
 :80 {
-    # Serve static frontend files
-    root * /usr/share/caddy
-    file_server
-
     # Route API calls to the Express container
-    reverse_proxy /api/* backend:5050
+    handle /api/* {
+        reverse_proxy backend:5050
+    }
 
     # Route WebSockets / Socket.IO to the Express container
-    reverse_proxy /socket.io/* backend:5050
+    handle /socket.io/* {
+        reverse_proxy backend:5050
+    }
 
-    # Fallback to index.html for React Router routing
-    try_files {path} /index.html
+    # Serve static frontend files and fallback for React Router
+    handle {
+        root * /usr/share/caddy
+        try_files {path} /index.html
+        file_server
+    }
 }
