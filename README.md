@@ -75,7 +75,22 @@ ai-kanban-board/
 
 ---
 
+## 🚀 Deployment (CI/CD)
+
+The application is deployed on an **Azure VM** (Ubuntu) using **Docker** and **Caddy**. The deployment is fully automated via **GitHub Actions**.
+
+### Triggering a Deploy
+Pushes to the `main` branch trigger a GitHub Actions runner that:
+1.  Compiles the React frontend static assets (`dist`).
+2.  Zips the build and server folders into `deploy.zip`.
+3.  Uploads the archive to the Azure VM via SSH (`scp`).
+4.  Logs in to the VM, extracts the files, and rebuilds the containers (`docker compose -f docker-compose.prod.yml up -d --build`).
+
+*For details on how to set up the repository secrets (`SSH_PRIVATE_KEY` and `VM_PUBLIC_IP`), read the [CI/CD Automation Documentation](file:///f:/personal-projects/ai-kanban-board/dev2deploy.md#15-automating-my-deployment-with-cicd).*
+
+---
+
 ## 📘 Developer Resources
 
 *   For an in-depth understanding of the database schema, frontend-backend lifecycles, and network architecture, refer to the [System Architecture Document](file:///f:/personal-projects/ai-kanban-board/docs/architecture.md).
-*   For the complete history of technical challenges, fixes (e.g., Caddy 405 error, Express route merging issues), manual deployment scripts, and automated GitHub Actions guides, read the [Developer to Deployment Guide](file:///f:/personal-projects/ai-kanban-board/docs/dev2deploy.md).
+*   For the complete history of technical challenges, fixes (e.g., Caddy 405 error, Express route merging issues), manual deployment scripts, and automated GitHub Actions guides, read the [Consolidated Build & Deployment Documentation](file:///f:/personal-projects/ai-kanban-board/dev2deploy.md).

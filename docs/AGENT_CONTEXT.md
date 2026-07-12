@@ -59,3 +59,17 @@ Tasks and columns are sorted by the `position` column. Do not use integer-based 
 *   Run `npm run dev` in the root workspace. This starts:
     *   Vite frontend on `http://localhost:5173`
     *   Express backend on `http://localhost:5050`
+
+---
+
+## 🚀 CI/CD & Deployment
+
+Deployments to the production Azure Virtual Machine (`104.214.171.72`) are fully automated via GitHub Actions.
+
+*   **Workflow File**: [.github/workflows/deploy.yml](file:///f:/personal-projects/ai-kanban-board/.github/workflows/deploy.yml)
+*   **Trigger**: Pushes to `main` branch.
+*   **Production Secrets Required** (stored in GitHub Repository Secrets):
+    *   `VM_PUBLIC_IP`: The IP address of the target VM.
+    *   `SSH_PRIVATE_KEY`: The RSA private key (.pem) used to authenticate SSH connection.
+*   **Docker context**: Caddy acts as the frontend server and API reverse proxy on the VM. Caddy config is handled in the root [Caddyfile](file:///f:/personal-projects/ai-kanban-board/Caddyfile).
+
