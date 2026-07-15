@@ -48,9 +48,9 @@ jobs:
             echo "Waiting for services to spin up..."
             sleep 8
             
-            # Check database connection and users table
-            echo "Checking database status..."
-            docker compose -f docker-compose.prod.yml exec -T database psql -U postgres -d kanboard -c "SELECT 1 FROM users LIMIT 1;" >/dev/null 2>&1
+            # Check database connection and schema (verify presence of new task_ids column)
+            echo "Checking database status and schema..."
+            docker compose -f docker-compose.prod.yml exec -T database psql -U postgres -d kanboard -c "SELECT task_ids FROM columns LIMIT 1;" >/dev/null 2>&1
             DB_CHECK_STATUS=$?
             echo "Database check exit status: $DB_CHECK_STATUS"
             
