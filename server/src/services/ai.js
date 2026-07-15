@@ -11,9 +11,50 @@ function getModel() {
   }
   if (!genAI) {
     genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const modelName = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    model = genAI.getGenerativeModel({ model: modelName });
   }
   return model;
+}
+
+/** Safely calls Gemini API, catching and mapping quota or credential errors to clean AppErrors. Retries on temporary errors (e.g. 503). */
+async function safeGenerateContent(m, prompt, retries = 3, delayMs = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await m.generateContent(prompt);
+    } catch (err) {
+      console.error(`Gemini API Error (Attempt ${attempt}/${retries}):`, err);
+      const msg = err.message || "";
+      const isTemporary = 
+        err.status === 503 || 
+        msg.includes("503") || 
+        err.status === 429 || 
+        msg.includes("429") || 
+        msg.includes("quota") || 
+        msg.includes("Quota") || 
+        msg.includes("limit") || 
+        msg.includes("spikes") || 
+        msg.includes("demand") || 
+        msg.includes("temporary") ||
+        msg.includes("Unavailable");
+      
+      if (isTemporary && attempt < retries) {
+        console.warn(`Temporary Gemini error encountered. Retrying attempt ${attempt + 1} in ${delayMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        delayMs *= 2; // exponential backoff
+        continue;
+      }
+      
+      // If we exhaust retries or it's not a temporary error, map to user-friendly AppError
+      if (err.status === 429 || msg.includes("429") || msg.includes("quota") || msg.includes("Quota") || msg.includes("Requests")) {
+        throw new AppError("Gemini AI API quota exceeded or rate-limited. Please configure a valid API key with sufficient quota.", 429);
+      }
+      if (err.status === 403 || msg.includes("403") || msg.includes("denied") || msg.includes("Forbidden") || msg.includes("API key")) {
+        throw new AppError("Gemini AI API access denied. Please verify your API key is correct and authorized.", 403);
+      }
+      throw new AppError(err.message || "Failed to generate content from Gemini AI.", 502);
+    }
+  }
 }
 
 /** Safely parse JSON from Gemini's response (strips markdown fences if present). */
@@ -46,7 +87,7 @@ Generate exactly ${count} tasks as a JSON array. Each task object must have:
 
 Return ONLY the JSON array, no markdown fences, no explanation.`;
 
-  const result = await m.generateContent(prompt);
+  const result = await safeGenerateContent(m, prompt);
   const text = result.response.text();
   const taskList = parseJSON(text);
 
@@ -125,7 +166,7 @@ Return a JSON array of 3-6 subtasks. Each object must have:
 
 Return ONLY the JSON array, no markdown fences, no explanation.`;
 
-  const result = await m.generateContent(prompt);
+  const result = await safeGenerateContent(m, prompt);
   const text = result.response.text();
   const subtasks = parseJSON(text);
 
@@ -181,7 +222,7 @@ Return a JSON object with:
 
 Return ONLY the JSON object, no markdown fences, no explanation.`;
 
-  const result = await m.generateContent(prompt);
+  const result = await safeGenerateContent(m, prompt);
   const text = result.response.text();
   const parsed = parseJSON(text);
 
