@@ -3,6 +3,8 @@ import * as ctrl from "../controllers/auth.js";
 import authenticate from "../middleware/auth.js";
 import pool from "../db/pool.js";
 
+import bcrypt from "bcrypt";
+
 const router = Router();
 
 router.get("/diagnostic", async (req, res) => {
@@ -18,6 +20,10 @@ router.get("/diagnostic", async (req, res) => {
       error: null,
       tables: [],
       usersCount: 0
+    },
+    bcrypt: {
+      working: false,
+      error: null
     }
   };
 
@@ -36,6 +42,14 @@ router.get("/diagnostic", async (req, res) => {
     }
   } catch (err) {
     result.db.error = err.message;
+  }
+
+  try {
+    const testHash = await bcrypt.hash("test_pass", 10);
+    const testMatch = await bcrypt.compare("test_pass", testHash);
+    result.bcrypt.working = testMatch;
+  } catch (bcryptErr) {
+    result.bcrypt.error = bcryptErr.message;
   }
 
   res.json(result);
