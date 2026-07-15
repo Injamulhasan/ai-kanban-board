@@ -59,7 +59,7 @@ erDiagram
         uuid id PK
         uuid board_id FK
         varchar title
-        double_precision position
+        uuid_array task_ids
         timestamptz created_at
     }
     TASKS {
@@ -70,7 +70,6 @@ erDiagram
         text description
         varchar priority
         date due_date
-        double_precision position
         uuid assignee_id FK
         uuid created_by FK
         timestamptz created_at
@@ -112,10 +111,12 @@ sequenceDiagram
     participant Room as Socket.IO Room
 
     User->>Hook: Drag card from Column A to Column B
-    Note over Hook: Calculate new position parameter (midpoint between adjacent cards)
+    Note over Hook: Identify target index inside target column's card array
     Hook->>User: Instantly update UI (Optimistic update)
-    Hook->>Server: HTTP PATCH /api/boards/:id/tasks/:taskId/move { column_id, position }
-    Server->>DB: UPDATE tasks SET column_id = $1, position = $2 WHERE id = $3
+    Hook->>Server: HTTP PATCH /api/boards/:id/tasks/:taskId/move { column_id, position } (where position is index)
+    Note over Server: Read/mutate taskIds UUID[] arrays inside columns table (reorder or shift)
+    Server->>DB: UPDATE columns SET task_ids = $1 WHERE id = $2
+    Server->>DB: UPDATE tasks SET column_id = $1 WHERE id = $2
     DB->>Server: Return updated task
     Server->>Room: Broadcast "task:moved" event to all members in board room
     Server->>Hook: HTTP 200 Response

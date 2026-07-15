@@ -6,19 +6,23 @@ Welcome, Agent! This document is designed to help you quickly understand the Kan
 
 ## 🛠️ Tech Stack & Key Files
 
-Kanboard is a containerized PERN-stack monorepo:
-*   **Frontend**: React (Vite) + TailwindCSS 4 (using `@tailwindcss/vite` plugin).
-*   **Backend**: Node.js + Express.js + Socket.IO (version 4).
-*   **Database**: PostgreSQL 17 (pg driver).
-*   **AI Engine**: Google Gemini API (`@google/generative-ai` SDK using `gemini-2.0-flash`).
+Kanboard is a containerized, simplified full-stack monorepo:
+*   **Frontend**: React (Vite) + TailwindCSS 4 (using `@tailwindcss/vite` plugin) + Redux Toolkit.
+*   **Backend**: Node.js + Express.js + Socket.IO (version 4) + Redis Adapter.
+*   **Database**: PostgreSQL 17 + Prisma ORM (v7.8.0).
+*   **AI Engine**: Google Gemini API (`@google/generative-ai` SDK).
 
 ### Critical Entry Points:
 *   [Root package.json](file:///f:/personal-projects/ai-kanban-board/package.json): Root scripts. Runs `concurrently` to boot both dev servers.
 *   [Vite config](file:///f:/personal-projects/ai-kanban-board/vite.config.js): Handles React compiling and Tailwind integration.
+*   [Prisma Schema](file:///f:/personal-projects/ai-kanban-board/server/prisma/schema.prisma): Prisma schema file defining database relations and models.
+*   [Prisma Configuration](file:///f:/personal-projects/ai-kanban-board/server/prisma.config.ts): Dynamic datasource config resolver.
 *   [Backend index.js](file:///f:/personal-projects/ai-kanban-board/server/src/index.js): Express app server bootstrap and Socket.IO initialization.
-*   [Socket module](file:///f:/personal-projects/ai-kanban-board/server/src/socket.js): Event handlers, authentication handshake, and presence mappings.
-*   [API Client (Frontend)](file:///f:/personal-projects/ai-kanban-board/src/lib/api.js): Axios HTTP requests. Signature matches the mock API logic.
+*   [Socket module](file:///f:/personal-projects/ai-kanban-board/server/src/socket.js): Event handlers, authentication handshake, Redis adapter, and presence mappings.
+*   [API Client (Frontend)](file:///f:/personal-projects/ai-kanban-board/src/lib/api.js): Axios HTTP requests.
 *   [Socket Client (Frontend)](file:///f:/personal-projects/ai-kanban-board/src/lib/socket.js): Websocket connections and event listeners.
+*   [Redux Store](file:///f:/personal-projects/ai-kanban-board/src/store/index.js): Redux Toolkit configuration.
+*   [Redux Board Slice](file:///f:/personal-projects/ai-kanban-board/src/store/boardSlice.js): Redux actions and reducers managing columns, tasks, members, and presence.
 
 ---
 
@@ -36,16 +40,20 @@ To ensure `mergeParams: true` works correctly in Express nested routers, always 
 Every route mutating or fetching board-specific data must be guarded by `requireBoardMember` in `boards.js`. This automatically verifies that the authenticated user (`req.user.id`) is listed in the `board_members` table for the matching board.
 
 ### 3. Websocket Broadcasts:
-After any database mutation inside a controller (e.g. creating/updating a task or column), you must broadcast the change to the corresponding board's Socket.IO room.
+After any database mutation inside a controller (e.g. creating/updating a task or column), broadcast the change to the corresponding board's Socket.IO room via the centralized `eventEmitter` service. This avoids direct Socket.io references in controllers.
 *   *Example*:
     ```javascript
-    getIO().to(`board:${boardId}`).emit("task:created", task);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${boardId}`,
+      event: "task:created",
+      data: task
+    });
     ```
 
-### 4. Floating-Point Positions (Drag & Drop):
-Tasks and columns are sorted by the `position` column. Do not use integer-based ranking (1, 2, 3) or trigger bulk position updates.
-*   When a card is dropped between card A (position `X`) and card B (position `Y`), calculate the new position as `(X + Y) / 2`.
-*   This ensures `O(1)` updates on the database.
+### 4. Array-Based Task Ordering:
+Tasks are sorted inside each column by mapping them according to the `task_ids` UUID array stored directly on the Column record.
+*   When a card is moved within or across columns, the frontend passes the target `position` as the integer array index (0, 1, 2, ...).
+*   The backend `moveTask` service modifies the column's `taskIds` array in a database transaction, appending, removing, or splicing the task ID.
 
 ---
 
@@ -53,6 +61,7 @@ Tasks and columns are sorted by the `position` column. Do not use integer-based 
 
 ### Local Database Actions
 *   To start PostgreSQL container: `docker compose up -d`
+*   To compile Prisma Client: `npx --prefix server prisma generate`
 *   To reset & seed tables: `npm run seed --prefix server`
 
 ### Starting Dev Servers

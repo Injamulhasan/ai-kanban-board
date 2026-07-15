@@ -49,7 +49,7 @@ Represents stages in the Kanban pipeline.
 | `id` | `UUID` | `PRIMARY KEY`, default `uuid_generate_v4()` | Unique column identifier. |
 | `board_id` | `UUID` | `NOT NULL`, `REFERENCES boards(id) ON DELETE CASCADE` | The parent board. |
 | `title` | `VARCHAR(200)` | `NOT NULL` | Stage name (e.g. "Todo"). |
-| `position` | `DOUBLE PRECISION`| `NOT NULL`, default `1000` | Sorting order within the board. |
+| `task_ids` | `UUID[]` | default `{}` | Array of task IDs defining card order inside the column. |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL`, default `now()` | Creation timestamp. |
 
 ### 5. `tasks`
@@ -64,7 +64,6 @@ Stores actionable tickets.
 | `description` | `TEXT` | `NULL` | Detailed description or subtasks list. |
 | `priority` | `VARCHAR(20)` | default `medium`, check (`low`, `medium`, `high`, `urgent`) | Importance ranking. |
 | `due_date` | `DATE` | `NULL` | Task deadline. |
-| `position` | `DOUBLE PRECISION`| `NOT NULL`, default `1000` | Sorting order within the column. |
 | `assignee_id` | `UUID` | `REFERENCES users(id) ON DELETE SET NULL` | Assigned teammate. |
 | `created_by` | `UUID` | `REFERENCES users(id) ON DELETE SET NULL` | Task creator. |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL`, default `now()` | Creation timestamp. |
