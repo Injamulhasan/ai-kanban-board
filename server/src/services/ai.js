@@ -12,7 +12,10 @@ function getModel() {
   if (!genAI) {
     genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const modelName = process.env.GEMINI_MODEL || "gemini-3.5-flash";
-    model = genAI.getGenerativeModel({ model: modelName });
+    model = genAI.getGenerativeModel({
+      model: modelName,
+      generationConfig: { responseMimeType: "application/json" }
+    });
   }
   return model;
 }
@@ -104,11 +107,9 @@ Return ONLY the JSON array, no markdown fences, no explanation.`;
     if (!targetColumnId) throw new AppError("Board has no columns", 400);
   }
 
-  // Insert tasks into DB
-  const created = [];
-  for (let i = 0; i < taskList.length; i++) {
-    const t = taskList[i];
-    const { rows } = await pool.query(
+  // Insert tasks into DB in parallel
+  const insertPromises = taskList.map((t, i) => {
+    return pool.query(
       `INSERT INTO tasks (board_id, column_id, title, description, priority, position, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, NULL) RETURNING *`,
       [
@@ -120,14 +121,16 @@ Return ONLY the JSON array, no markdown fences, no explanation.`;
         Date.now() + i,
       ]
     );
-    created.push({
-      ...rows[0],
-      assignee_id: null,
-      assignee_name: null,
-      assignee_email: null,
-      assignee_avatar: null,
-    });
-  }
+  });
+
+  const queryResults = await Promise.all(insertPromises);
+  const created = queryResults.map((res) => ({
+    ...res.rows[0],
+    assignee_id: null,
+    assignee_name: null,
+    assignee_email: null,
+    assignee_avatar: null,
+  }));
 
   await pool.query("UPDATE boards SET updated_at = now() WHERE id = $1", [boardId]);
 
