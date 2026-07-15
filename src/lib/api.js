@@ -46,6 +46,7 @@ export const authApi = {
 
 export const userApi = {
   search: (q) => api.get("/users/search", { params: { q } }).then((r) => r.data.users),
+  getNotifications: (limit = 15) => api.get("/users/notifications", { params: { limit } }).then((r) => r.data.activities),
 };
 
 export const boardApi = {

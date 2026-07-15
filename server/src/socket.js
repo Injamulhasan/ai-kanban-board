@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import pool from "./db/pool.js";
 
 let io = null;
 
@@ -35,6 +36,19 @@ export function initSocket(httpServer) {
 
   io.on("connection", (socket) => {
     console.log(`⚡ Socket connected: ${socket.user.name} (${socket.user.id})`);
+
+    // Automatically join the rooms of all boards this user is a member of
+    // so they receive live notifications across all their boards!
+    pool.query(
+      "SELECT board_id FROM board_members WHERE user_id = $1",
+      [socket.user.id]
+    ).then(({ rows }) => {
+      rows.forEach(r => {
+        socket.join(`board:${r.board_id}`);
+      });
+    }).catch(err => {
+      console.error(`Error auto-joining socket rooms for user ${socket.user.id}:`, err);
+    });
 
     // Join a board room
     socket.on("board:join", (boardId) => {
