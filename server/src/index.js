@@ -11,28 +11,41 @@ import { initSocket } from "./socket.js";
 const app = express();
 
 // --------------- Middleware ---------------
-const allowedOrigins = [
-  process.env.CLIENT_URL,
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  "http://localhost:80",
-  "http://127.0.0.1:80"
-].filter(Boolean);
+app.use(cors((req, callback) => {
+  const origin = req.header("Origin");
+  let corsOptions = { credentials: true, origin: false };
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, postman)
-    if (!origin) return callback(null, true);
-    if (
-      allowedOrigins.includes(origin) || 
-      origin.startsWith("http://localhost:") || 
-      origin.startsWith("http://127.0.0.1:")
-    ) {
-      return callback(null, true);
+  if (!origin) {
+    corsOptions.origin = true;
+  } else {
+    try {
+      const originHost = new URL(origin).host;
+      const requestHost = req.header("Host");
+      
+      const allowedOrigins = [
+        process.env.CLIENT_URL,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:80",
+        "http://127.0.0.1:80"
+      ].filter(Boolean).map(o => {
+        try { return new URL(o).host; } catch { return o; }
+      });
+
+      if (
+        originHost === requestHost ||
+        allowedOrigins.includes(originHost) ||
+        originHost.startsWith("localhost:") ||
+        originHost.startsWith("127.0.0.1:")
+      ) {
+        corsOptions.origin = origin;
+      }
+    } catch {
+      corsOptions.origin = false;
     }
-    return callback(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
+  }
+
+  callback(null, corsOptions);
 }));
 app.use(express.json());
 
