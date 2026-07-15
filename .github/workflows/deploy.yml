@@ -60,10 +60,20 @@ jobs:
             echo "Waiting for services to spin up..."
             sleep 8
             
-            # Check if database is already initialized by checking if users table exists
-            if ! docker compose -f docker-compose.prod.yml exec -T database psql -U postgres -d kanboard -c "SELECT 1 FROM users LIMIT 1;" >/dev/null 2>&1; then
-              echo "⚠️ Database not initialized. Running database seed..."
-              docker compose -f docker-compose.prod.yml exec -T backend npm run seed
+            # Check database connection and users table
+            echo "Checking database status..."
+            docker compose -f docker-compose.prod.yml exec -T database psql -U postgres -d kanboard -c "SELECT 1 FROM users LIMIT 1;" >/dev/null 2>&1
+            DB_CHECK_STATUS=$?
+            echo "Database check exit status: $DB_CHECK_STATUS"
+            
+            if [ $DB_CHECK_STATUS -ne 0 ]; then
+              echo "⚠️ Database check failed or tables do not exist. Running database seed..."
+              if ! docker compose -f docker-compose.prod.yml exec -T backend npm run seed; then
+                echo "❌ Database seed failed! Printing container logs for troubleshooting:"
+                docker compose -f docker-compose.prod.yml logs backend
+                docker compose -f docker-compose.prod.yml logs database
+                exit 1
+              fi
               echo "✅ Database initialized and seeded successfully."
             else
               echo "✅ Database is already initialized. Skipping seed."
