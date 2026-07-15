@@ -1,4 +1,4 @@
-import pool from "../db/pool.js";
+import prisma from "../db/prisma.js";
 import AppError from "../utils/AppError.js";
 
 /**
@@ -11,16 +11,21 @@ const requireBoardMember = async (req, _res, next) => {
   if (!boardId) return next(new AppError("Board ID required", 400));
 
   try {
-    const { rows } = await pool.query(
-      `SELECT role FROM board_members WHERE board_id = $1 AND user_id = $2`,
-      [boardId, req.user.id]
-    );
+    const member = await prisma.boardMember.findUnique({
+      where: {
+        boardId_userId: {
+          boardId,
+          userId: req.user.id
+        }
+      },
+      select: { role: true }
+    });
 
-    if (rows.length === 0) {
+    if (!member) {
       return next(new AppError("Board not found or access denied", 404));
     }
 
-    req.boardRole = rows[0].role;
+    req.boardRole = member.role;
     next();
   } catch (err) {
     next(err);

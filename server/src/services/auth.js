@@ -1,15 +1,15 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import pool from "../db/pool.js";
+import prisma from "../db/prisma.js";
 import AppError from "../utils/AppError.js";
 
 const SALT_ROUNDS = 12;
 
 /** Strip password from a user row and return a clean user object. */
-const sanitize = (row) => {
-  if (!row) return null;
-  const { password, ...user } = row;
-  return user;
+const sanitize = (user) => {
+  if (!user) return null;
+  const { password, ...clean } = user;
+  return clean;
 };
 
 const signToken = (user) =>
@@ -25,42 +25,55 @@ export async function register({ name, email, password }) {
   if (!password || password.length < 6)
     throw new AppError("Password must be at least 6 characters");
 
-  const exists = await pool.query("SELECT 1 FROM users WHERE email = $1", [
-    email.toLowerCase(),
-  ]);
-  if (exists.rows.length) throw new AppError("Email already registered", 409);
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const exists = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (exists) throw new AppError("Email already registered", 409);
 
   const hash = await bcrypt.hash(password, SALT_ROUNDS);
-  const { rows } = await pool.query(
-    `INSERT INTO users (name, email, password)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [name.trim(), email.toLowerCase().trim(), hash]
-  );
+  
+  const created = await prisma.user.create({
+    data: {
+      name: name.trim(),
+      email: normalizedEmail,
+      password: hash,
+    },
+  });
 
-  const user = sanitize(rows[0]);
+  const user = sanitize(created);
   return { user, token: signToken(user) };
 }
 
 export async function login({ email, password }) {
   if (!email || !password) throw new AppError("Email and password are required");
 
-  const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [
-    email.toLowerCase(),
-  ]);
-  if (!rows.length) throw new AppError("Invalid credentials", 401);
+  const normalizedEmail = email.toLowerCase().trim();
 
-  const valid = await bcrypt.compare(password, rows[0].password);
+  const userRecord = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (!userRecord) throw new AppError("Invalid credentials", 401);
+
+  const valid = await bcrypt.compare(password, userRecord.password);
   if (!valid) throw new AppError("Invalid credentials", 401);
 
-  const user = sanitize(rows[0]);
+  const user = sanitize(userRecord);
   return { user, token: signToken(user) };
 }
 
 export async function me(userId) {
-  const { rows } = await pool.query(
-    "SELECT id, name, email, avatar_url, created_at FROM users WHERE id = $1",
-    [userId]
-  );
-  if (!rows.length) throw new AppError("User not found", 404);
-  return rows[0];
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      avatarUrl: true,
+      createdAt: true,
+    },
+  });
+  if (!user) throw new AppError("User not found", 404);
+  return user;
 }

@@ -1,78 +1,87 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { boardApi, taskApi, columnApi } from "../lib/api";
 import { connectSocket } from "../lib/socket";
+import {
+  setBoardData,
+  setLoading,
+  setError,
+  updateBoardDetails,
+  upsertTaskState,
+  removeTaskState,
+  upsertColumnState,
+  removeColumnState,
+  addMemberState,
+  removeMemberState,
+  setPresenceState,
+  addPresenceState,
+  removePresenceState,
+  clearBoardState,
+} from "../store/boardSlice";
 
 /**
- * Loads a board and keeps it in sync via Socket.IO. Returns board state plus
- * mutation helpers that update optimistically and persist to the API.
+ * Loads a board and keeps it in sync via Socket.IO using Redux store.
+ * Returns board state plus mutation helpers that update optimistically and persist to the API.
  */
 export const useBoard = (boardId) => {
-  const [board, setBoard] = useState(null);
-  const [columns, setColumns] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [members, setMembers] = useState([]);
-  const [role, setRole] = useState("member");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [presence, setPresence] = useState([]);
+  const dispatch = useDispatch();
+
+  const board = useSelector((state) => state.board.board);
+  const columns = useSelector((state) => state.board.columns);
+  const tasks = useSelector((state) => state.board.tasks);
+  const members = useSelector((state) => state.board.members);
+  const role = useSelector((state) => state.board.role);
+  const loading = useSelector((state) => state.board.loading);
+  const error = useSelector((state) => state.board.error);
+  const presence = useSelector((state) => state.board.presence);
 
   const upsertTask = useCallback((task) => {
-    setTasks((prev) => {
-      const idx = prev.findIndex((t) => t.id === task.id);
-      if (idx === -1) return [...prev, task];
-      const next = [...prev];
-      next[idx] = task;
-      return next;
-    });
-  }, []);
+    dispatch(upsertTaskState(task));
+  }, [dispatch]);
 
   const removeTaskLocal = useCallback((id) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+    dispatch(removeTaskState(id));
+  }, [dispatch]);
 
   // Initial load
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setError(null);
+    dispatch(setLoading(true));
+    dispatch(setError(null));
     boardApi
       .get(boardId)
       .then((data) => {
         if (!alive) return;
-        setBoard(data.board);
-        setColumns(data.columns);
-        setTasks(data.tasks);
-        setMembers(data.members);
-        setRole(data.role);
+        dispatch(setBoardData(data));
       })
-      .catch((err) => alive && setError(err.message))
-      .finally(() => alive && setLoading(false));
+      .catch((err) => {
+        if (alive) dispatch(setError(err.message));
+      });
     return () => {
       alive = false;
+      dispatch(clearBoardState());
     };
-  }, [boardId]);
+  }, [boardId, dispatch]);
 
   // Real-time sync
   useEffect(() => {
     const socket = connectSocket();
     socket.emit("board:join", boardId);
 
-    const onCreated = (t) => upsertTask(t);
-    const onUpdated = (t) => upsertTask(t);
-    const onMoved = (t) => upsertTask(t);
-    const onDeleted = ({ id }) => removeTaskLocal(id);
-    const onColCreated = (c) => setColumns((p) => [...p, c].sort((a, b) => a.position - b.position));
-    const onColUpdated = (c) =>
-      setColumns((p) => p.map((x) => (x.id === c.id ? c : x)).sort((a, b) => a.position - b.position));
-    const onColDeleted = ({ id }) => setColumns((p) => p.filter((x) => x.id !== id));
-    const onBoardUpdated = (b) => setBoard(b);
-    const onMemberAdded = (m) => setMembers((p) => p.find((x) => x.id === m.id) ? p : [...p, m]);
-    const onMemberRemoved = ({ userId }) => setMembers((p) => p.filter((x) => x.id !== userId));
-    const onPresenceSync = ({ users }) => setPresence(users || []);
-    const onPresenceJoin = ({ user }) =>
-      setPresence((p) => (p.find((u) => u.id === user.id) ? p : [...p, user]));
-    const onPresenceLeave = ({ user }) => setPresence((p) => p.filter((u) => u.id !== user.id));
+    const onCreated = (t) => dispatch(upsertTaskState(t));
+    const onUpdated = (t) => dispatch(upsertTaskState(t));
+    const onMoved = (t) => dispatch(upsertTaskState(t));
+    const onDeleted = ({ id }) => dispatch(removeTaskState(id));
+    const onColCreated = (c) => dispatch(upsertColumnState(c));
+    const onColUpdated = (c) => dispatch(upsertColumnState(c));
+    const onColDeleted = ({ id }) => dispatch(removeColumnState(id));
+    const onBoardUpdated = (b) => dispatch(updateBoardDetails(b));
+    const onMemberAdded = (m) => dispatch(addMemberState(m));
+    const onMemberRemoved = ({ userId }) => dispatch(removeMemberState(userId));
+    const onPresenceSync = ({ users }) => dispatch(setPresenceState(users));
+    const onPresenceJoin = ({ user }) => dispatch(addPresenceState(user));
+    const onPresenceLeave = ({ user }) => dispatch(removePresenceState(user.id));
 
     socket.on("task:created", onCreated);
     socket.on("task:updated", onUpdated);
@@ -103,9 +112,8 @@ export const useBoard = (boardId) => {
       socket.off("presence:sync", onPresenceSync);
       socket.off("presence:join", onPresenceJoin);
       socket.off("presence:leave", onPresenceLeave);
-      setPresence([]);
     };
-  }, [boardId, upsertTask, removeTaskLocal]);
+  }, [boardId, dispatch]);
 
   /* ----------------------------- mutations ----------------------------- */
 
@@ -113,105 +121,117 @@ export const useBoard = (boardId) => {
     async (data) => {
       try {
         const task = await taskApi.create(boardId, data);
-        upsertTask(task);
+        dispatch(upsertTaskState(task));
         return task;
       } catch (err) {
         toast.error(err.message);
         throw err;
       }
     },
-    [boardId, upsertTask]
+    [boardId, dispatch]
   );
 
   const updateTask = useCallback(
     async (taskId, data) => {
       const prev = tasks.find((t) => t.id === taskId);
-      upsertTask({ ...prev, ...data }); // optimistic
+      dispatch(upsertTaskState({ ...prev, ...data })); // optimistic
       try {
         const task = await taskApi.update(boardId, taskId, data);
-        upsertTask(task);
+        dispatch(upsertTaskState(task));
         return task;
       } catch (err) {
-        if (prev) upsertTask(prev);
+        if (prev) dispatch(upsertTaskState(prev));
         toast.error(err.message);
         throw err;
       }
     },
-    [boardId, tasks, upsertTask]
+    [boardId, tasks, dispatch]
   );
 
   const deleteTask = useCallback(
     async (taskId) => {
       const prev = tasks.find((t) => t.id === taskId);
-      removeTaskLocal(taskId); // optimistic
+      dispatch(removeTaskState(taskId)); // optimistic
       try {
         await taskApi.remove(boardId, taskId);
         toast.success("Task deleted");
       } catch (err) {
-        if (prev) upsertTask(prev);
+        if (prev) dispatch(upsertTaskState(prev));
         toast.error(err.message);
       }
     },
-    [boardId, tasks, removeTaskLocal, upsertTask]
+    [boardId, tasks, dispatch]
   );
 
-  // Apply a local move immediately, then persist.
   const moveTask = useCallback(
     async (taskId, columnId, position) => {
       const prev = tasks.find((t) => t.id === taskId);
       if (!prev) return;
-      upsertTask({ ...prev, column_id: columnId, position });
+      dispatch(upsertTaskState({ ...prev, column_id: columnId, position }));
       try {
         await taskApi.move(boardId, taskId, { column_id: columnId, position });
       } catch (err) {
-        upsertTask(prev);
+        dispatch(upsertTaskState(prev));
         toast.error(err.message);
       }
     },
-    [boardId, tasks, upsertTask]
+    [boardId, tasks, dispatch]
   );
 
   const addColumn = useCallback(
     async (title) => {
       try {
         const col = await columnApi.create(boardId, { title });
-        setColumns((p) => [...p, col].sort((a, b) => a.position - b.position));
+        dispatch(upsertColumnState(col));
       } catch (err) {
         toast.error(err.message);
       }
     },
-    [boardId]
+    [boardId, dispatch]
   );
 
   const renameColumn = useCallback(
     async (columnId, title) => {
-      setColumns((p) => p.map((c) => (c.id === columnId ? { ...c, title } : c)));
+      const prev = columns.find((c) => c.id === columnId);
+      dispatch(upsertColumnState({ ...prev, title }));
       try {
         await columnApi.update(boardId, columnId, { title });
       } catch (err) {
+        if (prev) dispatch(upsertColumnState(prev));
         toast.error(err.message);
       }
     },
-    [boardId]
+    [boardId, columns, dispatch]
   );
 
   const deleteColumn = useCallback(
     async (columnId) => {
+      dispatch(removeColumnState(columnId));
       try {
         await columnApi.remove(boardId, columnId);
-        setColumns((p) => p.filter((c) => c.id !== columnId));
-        setTasks((p) => p.filter((t) => t.column_id !== columnId));
       } catch (err) {
         toast.error(err.message);
       }
     },
-    [boardId]
+    [boardId, dispatch]
   );
 
   return {
-    board, columns, tasks, members, role, loading, error, presence,
-    setBoard, setMembers,
-    createTask, updateTask, deleteTask, moveTask, upsertTask,
-    addColumn, renameColumn, deleteColumn,
+    board,
+    columns,
+    tasks,
+    members,
+    role,
+    loading,
+    error,
+    presence,
+    createTask,
+    updateTask,
+    deleteTask,
+    moveTask,
+    upsertTask,
+    addColumn,
+    renameColumn,
+    deleteColumn,
   };
 };

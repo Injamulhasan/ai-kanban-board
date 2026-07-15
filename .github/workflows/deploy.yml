@@ -13,25 +13,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set Up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-
-      - name: Install Frontend Dependencies
-        run: npm ci
-
       - name: Create Production Env File
         run: |
           echo "VITE_API_URL=http://${{ secrets.VM_PUBLIC_IP }}/api" > .env.production
           echo "VITE_SOCKET_URL=http://${{ secrets.VM_PUBLIC_IP }}" >> .env.production
 
-      - name: Build Frontend Assets
-        run: npm run build
-
       - name: Create Deploy Zip
-        run: zip -r deploy.zip server/src server/package.json server/package-lock.json server/Dockerfile dist docker-compose.prod.yml Caddyfile
+        run: zip -r deploy.zip server src public package.json package-lock.json Dockerfile docker-compose.prod.yml Caddyfile .env.production vite.config.js index.html
 
       - name: Copy Files to Azure VM via SSH
         uses: appleboy/scp-action@v0.1.7

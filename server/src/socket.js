@@ -1,6 +1,9 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import pool from "./db/pool.js";
+import prisma from "./db/prisma.js";
+import { createClient } from "redis";
+import { createAdapter } from "@socket.io/redis-adapter";
+import eventEmitter from "./services/eventEmitter.js";
 
 let io = null;
 
@@ -19,6 +22,26 @@ export function initSocket(httpServer) {
     },
     transports: ["websocket", "polling"],
   });
+
+  // Setup Redis Adapter if REDIS_URL is configured
+  if (process.env.REDIS_URL) {
+    const pubClient = createClient({ url: process.env.REDIS_URL });
+    const subClient = pubClient.duplicate();
+
+    pubClient.on("error", (err) => console.error("Redis PubClient Error:", err));
+    subClient.on("error", (err) => console.error("Redis SubClient Error:", err));
+
+    Promise.all([pubClient.connect(), subClient.connect()])
+      .then(() => {
+        io.adapter(createAdapter(pubClient, subClient));
+        console.log("📡 Socket.IO Redis Adapter initialized successfully.");
+      })
+      .catch((err) => {
+        console.error("❌ Failed to connect to Redis. Falling back to default in-memory adapter.", err);
+      });
+  } else {
+    console.log("ℹ️ No REDIS_URL configured. Using default in-memory adapter.");
+  }
 
   // Authenticate every socket connection via JWT
   io.use((socket, next) => {
@@ -39,12 +62,12 @@ export function initSocket(httpServer) {
 
     // Automatically join the rooms of all boards this user is a member of
     // so they receive live notifications across all their boards!
-    pool.query(
-      "SELECT board_id FROM board_members WHERE user_id = $1",
-      [socket.user.id]
-    ).then(({ rows }) => {
-      rows.forEach(r => {
-        socket.join(`board:${r.board_id}`);
+    prisma.boardMember.findMany({
+      where: { userId: socket.user.id },
+      select: { boardId: true }
+    }).then((memberships) => {
+      memberships.forEach(m => {
+        socket.join(`board:${m.boardId}`);
       });
     }).catch(err => {
       console.error(`Error auto-joining socket rooms for user ${socket.user.id}:`, err);
@@ -87,6 +110,13 @@ export function initSocket(httpServer) {
         removeFromPresence(socket, socket.boardId);
       }
     });
+  });
+
+  // Central event listener to broadcast events across rooms
+  eventEmitter.on("emit:socket", ({ room, event, data }) => {
+    if (io) {
+      io.to(room).emit(event, data);
+    }
   });
 
   return io;

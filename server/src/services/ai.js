@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import pool from "../db/pool.js";
+import prisma from "../db/prisma.js";
 import AppError from "../utils/AppError.js";
 
 let genAI = null;
@@ -99,42 +99,68 @@ Return ONLY the JSON array, no markdown fences, no explanation.`;
   // Determine target column
   let targetColumnId = column_id;
   if (!targetColumnId) {
-    const { rows } = await pool.query(
-      "SELECT id FROM columns WHERE board_id = $1 ORDER BY position LIMIT 1",
-      [boardId]
-    );
-    targetColumnId = rows[0]?.id;
+    const firstCol = await prisma.column.findFirst({
+      where: { boardId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true }
+    });
+    targetColumnId = firstCol?.id;
     if (!targetColumnId) throw new AppError("Board has no columns", 400);
   }
 
-  // Insert tasks into DB in parallel
-  const insertPromises = taskList.map((t, i) => {
-    return pool.query(
-      `INSERT INTO tasks (board_id, column_id, title, description, priority, position, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, NULL) RETURNING *`,
-      [
-        boardId,
-        targetColumnId,
-        t.title || "Untitled task",
-        t.description || null,
-        ["low", "medium", "high", "urgent"].includes(t.priority) ? t.priority : "medium",
-        Date.now() + i,
-      ]
-    );
+  // Insert tasks inside a transaction and update the column's task_ids array
+  const createdTasks = await prisma.$transaction(async (tx) => {
+    const tasks = [];
+    for (const t of taskList) {
+      const task = await tx.task.create({
+        data: {
+          boardId,
+          columnId: targetColumnId,
+          title: t.title || "Untitled task",
+          description: t.description || null,
+          priority: ["low", "medium", "high", "urgent"].includes(t.priority) ? t.priority : "medium"
+        }
+      });
+      tasks.push(task);
+    }
+
+    const newIds = tasks.map(t => t.id);
+
+    await tx.column.update({
+      where: { id: targetColumnId },
+      data: {
+        taskIds: {
+          push: newIds
+        }
+      }
+    });
+
+    return tasks;
   });
 
-  const queryResults = await Promise.all(insertPromises);
-  const created = queryResults.map((res) => ({
-    ...res.rows[0],
-    assignee_id: null,
+  await prisma.board.update({
+    where: { id: boardId },
+    data: { updatedAt: new Date() }
+  });
+
+  const formatted = createdTasks.map((t) => ({
+    id: t.id,
+    board_id: t.boardId,
+    column_id: t.columnId,
+    title: t.title,
+    description: t.description,
+    priority: t.priority,
+    due_date: t.dueDate,
+    assignee_id: t.assigneeId,
+    created_by: t.createdBy,
+    created_at: t.createdAt,
+    updated_at: t.updatedAt,
     assignee_name: null,
     assignee_email: null,
     assignee_avatar: null,
   }));
 
-  await pool.query("UPDATE boards SET updated_at = now() WHERE id = $1", [boardId]);
-
-  return { tasks: created };
+  return { tasks: formatted };
 }
 
 /* ---------- Breakdown ---------- */
@@ -145,13 +171,12 @@ export async function breakdown(boardId, { taskId }) {
   let taskDescription = "";
 
   if (taskId) {
-    const { rows } = await pool.query(
-      "SELECT title, description FROM tasks WHERE id = $1 AND board_id = $2",
-      [taskId, boardId]
-    );
-    if (rows.length) {
-      taskTitle = rows[0].title;
-      taskDescription = rows[0].description || "";
+    const parentTask = await prisma.task.findUnique({
+      where: { id: taskId, boardId }
+    });
+    if (parentTask) {
+      taskTitle = parentTask.title;
+      taskDescription = parentTask.description || "";
     }
   }
 
@@ -185,22 +210,23 @@ Return ONLY the JSON array, no markdown fences, no explanation.`;
 /* ---------- Sprint Summary ---------- */
 
 export async function summary(boardId) {
-  // Fetch all columns and tasks for the board
-  const { rows: columns } = await pool.query(
-    "SELECT id, title FROM columns WHERE board_id = $1 ORDER BY position",
-    [boardId]
-  );
-  const { rows: tasks } = await pool.query(
-    "SELECT title, priority, column_id FROM tasks WHERE board_id = $1",
-    [boardId]
-  );
+  const columns = await prisma.column.findMany({
+    where: { boardId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, title: true }
+  });
+
+  const tasks = await prisma.task.findMany({
+    where: { boardId },
+    select: { title: true, priority: true, columnId: true }
+  });
 
   // Build context for the AI
   const colMap = {};
   columns.forEach((c) => (colMap[c.id] = c.title));
   const grouped = {};
   tasks.forEach((t) => {
-    const colName = colMap[t.column_id] || "Unknown";
+    const colName = colMap[t.columnId] || "Unknown";
     (grouped[colName] ||= []).push(`${t.title} [${t.priority}]`);
   });
 

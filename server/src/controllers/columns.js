@@ -1,18 +1,27 @@
 import * as taskService from "../services/tasks.js";
 import * as boardService from "../services/boards.js";
-import { getIO } from "../socket.js";
+import eventEmitter from "../services/eventEmitter.js";
 
 export const create = async (req, res, next) => {
   try {
     const task = await taskService.createColumn(req.params.boardId, req.body);
 
-    getIO().to(`board:${req.params.boardId}`).emit("column:created", task);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "column:created",
+      data: task
+    });
 
     const activity = await boardService.logActivity(
       req.params.boardId, req.user.id, "column.created",
       `${req.user.name} added column "${req.body.title}"`
     );
-    getIO().to(`board:${req.params.boardId}`).emit("activity:new", activity);
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "activity:new",
+      data: activity
+    });
 
     res.status(201).json({ column: task });
   } catch (err) {
@@ -26,7 +35,11 @@ export const update = async (req, res, next) => {
       req.params.boardId, req.params.columnId, req.body
     );
 
-    getIO().to(`board:${req.params.boardId}`).emit("column:updated", column);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "column:updated",
+      data: column
+    });
 
     res.json({ column });
   } catch (err) {
@@ -40,13 +53,22 @@ export const remove = async (req, res, next) => {
       req.params.boardId, req.params.columnId
     );
 
-    getIO().to(`board:${req.params.boardId}`).emit("column:deleted", { id: req.params.columnId });
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "column:deleted",
+      data: { id: req.params.columnId }
+    });
 
     const activity = await boardService.logActivity(
       req.params.boardId, req.user.id, "column.deleted",
       `${req.user.name} removed a column`
     );
-    getIO().to(`board:${req.params.boardId}`).emit("activity:new", activity);
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "activity:new",
+      data: activity
+    });
 
     res.json(result);
   } catch (err) {

@@ -9,7 +9,8 @@ CREATE TABLE users (
   email       VARCHAR(320) NOT NULL UNIQUE,
   password    VARCHAR(200) NOT NULL,
   avatar_url  TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE boards (
@@ -27,7 +28,7 @@ CREATE TABLE board_members (
   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   role       VARCHAR(20) NOT NULL DEFAULT 'member'
              CHECK (role IN ('owner','admin','member')),
-  joined_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (board_id, user_id)
 );
 
@@ -35,8 +36,9 @@ CREATE TABLE columns (
   id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   board_id   UUID NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   title      VARCHAR(200) NOT NULL,
-  position   DOUBLE PRECISION NOT NULL DEFAULT 1000,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  task_ids   UUID[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE tasks (
@@ -48,7 +50,6 @@ CREATE TABLE tasks (
   priority    VARCHAR(20) NOT NULL DEFAULT 'medium'
               CHECK (priority IN ('low','medium','high','urgent')),
   due_date    DATE,
-  position    DOUBLE PRECISION NOT NULL DEFAULT 1000,
   assignee_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

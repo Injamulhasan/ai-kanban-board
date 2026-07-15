@@ -210,11 +210,15 @@ async function seed() {
       const colIds = [];
       for (let i = 0; i < COL_TITLES.length; i++) {
         const { rows } = await client.query(
-          `INSERT INTO columns (board_id, title, position) VALUES ($1, $2, $3) RETURNING id`,
-          [boardId, COL_TITLES[i], (i + 1) * 1000]
+          `INSERT INTO columns (board_id, title) VALUES ($1, $2) RETURNING id`,
+          [boardId, COL_TITLES[i]]
         );
         colIds.push(rows[0].id);
       }
+
+      // Track card order arrays
+      const colTaskIds = {};
+      colIds.forEach(id => { colTaskIds[id] = []; });
 
       // Create tasks
       for (let i = 0; i < boardDef.tasks.length; i++) {
@@ -225,10 +229,19 @@ async function seed() {
           ? new Date(Date.now() + t.dueDays * DAY_MS).toISOString().slice(0, 10)
           : null;
 
+        const { rows: taskRows } = await client.query(
+          `INSERT INTO tasks (board_id, column_id, title, description, priority, due_date, assignee_id, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          [boardId, colId, t.title, t.desc, t.priority, dueDate, assigneeId, ownerId]
+        );
+        colTaskIds[colId].push(taskRows[0].id);
+      }
+
+      // Set initial task_ids on columns
+      for (const colId of colIds) {
         await client.query(
-          `INSERT INTO tasks (board_id, column_id, title, description, priority, due_date, position, assignee_id, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [boardId, colId, t.title, t.desc, t.priority, dueDate, (i + 1) * 1000, assigneeId, ownerId]
+          `UPDATE columns SET task_ids = $1 WHERE id = $2`,
+          [colTaskIds[colId], colId]
         );
       }
 

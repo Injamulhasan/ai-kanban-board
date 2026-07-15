@@ -1,21 +1,37 @@
-import pool from "../db/pool.js";
+import prisma from "../db/prisma.js";
 
 export const search = async (req, res, next) => {
   try {
     const q = (req.query.q || "").trim();
     if (!q) return res.json({ users: [] });
 
-    const { rows } = await pool.query(
-      `SELECT id, name, email, avatar_url
-       FROM users
-       WHERE id != $1
-         AND (name ILIKE $2 OR email ILIKE $2)
-       ORDER BY name
-       LIMIT 20`,
-      [req.user.id, `%${q}%`]
-    );
+    const users = await prisma.user.findMany({
+      where: {
+        id: { not: req.user.id },
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } }
+        ]
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true
+      },
+      orderBy: { name: 'asc' },
+      take: 20
+    });
 
-    res.json({ users: rows });
+    // Match original database structure property name casing for frontend
+    const formatted = users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      avatar_url: u.avatarUrl
+    }));
+
+    res.json({ users: formatted });
   } catch (err) {
     next(err);
   }
@@ -24,18 +40,41 @@ export const search = async (req, res, next) => {
 export const getNotifications = async (req, res, next) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
-    const { rows } = await pool.query(
-      `SELECT a.*, b.title AS board_title, u.name AS user_name, u.avatar_url AS user_avatar
-       FROM activities a
-       JOIN boards b ON b.id = a.board_id
-       JOIN board_members bm ON bm.board_id = b.id
-       LEFT JOIN users u ON u.id = a.user_id
-       WHERE bm.user_id = $1
-       ORDER BY a.created_at DESC
-       LIMIT $2`,
-      [req.user.id, limit]
-    );
-    res.json({ activities: rows });
+    
+    const activities = await prisma.activity.findMany({
+      where: {
+        board: {
+          members: {
+            some: { userId: req.user.id }
+          }
+        }
+      },
+      include: {
+        board: {
+          select: { title: true }
+        },
+        user: {
+          select: { name: true, avatarUrl: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit
+    });
+
+    const formatted = activities.map(a => ({
+      id: a.id,
+      board_id: a.boardId,
+      user_id: a.userId,
+      action: a.action,
+      message: a.message,
+      meta: a.meta,
+      created_at: a.createdAt,
+      board_title: a.board.title,
+      user_name: a.user?.name || null,
+      user_avatar: a.user?.avatarUrl || null
+    }));
+
+    res.json({ activities: formatted });
   } catch (err) {
     next(err);
   }

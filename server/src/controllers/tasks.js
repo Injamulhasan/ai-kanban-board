@@ -1,6 +1,6 @@
 import * as taskService from "../services/tasks.js";
 import * as boardService from "../services/boards.js";
-import { getIO } from "../socket.js";
+import eventEmitter from "../services/eventEmitter.js";
 
 export const list = async (req, res, next) => {
   try {
@@ -15,13 +15,22 @@ export const create = async (req, res, next) => {
   try {
     const task = await taskService.createTask(req.params.boardId, req.user.id, req.body);
 
-    getIO().to(`board:${req.params.boardId}`).emit("task:created", task);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "task:created",
+      data: task
+    });
 
     const activity = await boardService.logActivity(
       req.params.boardId, req.user.id, "task.created",
       `${req.user.name} created "${task.title}"`
     );
-    getIO().to(`board:${req.params.boardId}`).emit("activity:new", activity);
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "activity:new",
+      data: activity
+    });
 
     res.status(201).json({ task });
   } catch (err) {
@@ -35,13 +44,22 @@ export const update = async (req, res, next) => {
       req.params.boardId, req.params.taskId, req.body
     );
 
-    getIO().to(`board:${req.params.boardId}`).emit("task:updated", task);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "task:updated",
+      data: task
+    });
 
     const activity = await boardService.logActivity(
       req.params.boardId, req.user.id, "task.updated",
       `${req.user.name} updated "${task.title}"`
     );
-    getIO().to(`board:${req.params.boardId}`).emit("activity:new", activity);
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "activity:new",
+      data: activity
+    });
 
     res.json({ task });
   } catch (err) {
@@ -55,7 +73,11 @@ export const move = async (req, res, next) => {
       req.params.boardId, req.params.taskId, req.body
     );
 
-    getIO().to(`board:${req.params.boardId}`).emit("task:moved", task);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "task:moved",
+      data: task
+    });
 
     res.json({ task });
   } catch (err) {
@@ -69,13 +91,22 @@ export const remove = async (req, res, next) => {
       req.params.boardId, req.params.taskId
     );
 
-    getIO().to(`board:${req.params.boardId}`).emit("task:deleted", { id: req.params.taskId });
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "task:deleted",
+      data: { id: req.params.taskId }
+    });
 
     const activity = await boardService.logActivity(
       req.params.boardId, req.user.id, "task.deleted",
       `${req.user.name} deleted a task`
     );
-    getIO().to(`board:${req.params.boardId}`).emit("activity:new", activity);
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.boardId}`,
+      event: "activity:new",
+      data: activity
+    });
 
     res.json(result);
   } catch (err) {

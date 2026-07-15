@@ -1,5 +1,5 @@
 import * as boardService from "../services/boards.js";
-import { getIO } from "../socket.js";
+import eventEmitter from "../services/eventEmitter.js";
 
 export const list = async (req, res, next) => {
   try {
@@ -33,13 +33,22 @@ export const update = async (req, res, next) => {
     const board = await boardService.updateBoard(req.params.id, req.body);
 
     // Broadcast to all connected board members
-    getIO().to(`board:${req.params.id}`).emit("board:updated", board);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.id}`,
+      event: "board:updated",
+      data: board
+    });
 
     const activity = await boardService.logActivity(
       req.params.id, req.user.id, "board.updated",
       `${req.user.name} updated the board`
     );
-    getIO().to(`board:${req.params.id}`).emit("activity:new", activity);
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.id}`,
+      event: "activity:new",
+      data: activity
+    });
 
     res.json({ board });
   } catch (err) {
@@ -76,8 +85,17 @@ export const addMember = async (req, res, next) => {
       req.params.id, req.user.id, "member.added",
       `${req.user.name} added ${member.name} to the board`
     );
-    getIO().to(`board:${req.params.id}`).emit("activity:new", activity);
-    getIO().to(`board:${req.params.id}`).emit("member:added", member);
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.id}`,
+      event: "activity:new",
+      data: activity
+    });
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.id}`,
+      event: "member:added",
+      data: member
+    });
 
     res.status(201).json({ member });
   } catch (err) {
@@ -93,8 +111,17 @@ export const removeMember = async (req, res, next) => {
       req.params.id, req.user.id, "member.removed",
       `${req.user.name} removed a member from the board`
     );
-    getIO().to(`board:${req.params.id}`).emit("activity:new", activity);
-    getIO().to(`board:${req.params.id}`).emit("member:removed", { userId: req.params.userId });
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.id}`,
+      event: "activity:new",
+      data: activity
+    });
+    
+    eventEmitter.emit("emit:socket", {
+      room: `board:${req.params.id}`,
+      event: "member:removed",
+      data: { userId: req.params.userId }
+    });
 
     res.json(result);
   } catch (err) {
