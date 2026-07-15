@@ -88,7 +88,7 @@ Deployments to the production Azure Virtual Machine (`104.214.171.72`) are fully
 
 ### 1. Robust AI Wrapper & Latency Optimizations
 All Gemini integrations (task generation, breakdown, sprint summary) are optimized for speed, reliability, and clean error handling:
-* **Model Selection**: Loaded dynamically via `process.env.GEMINI_MODEL`, defaulting to `gemini-3.5-flash` or the high-speed `gemini-flash-lite-latest`.
+* **Model Selection**: Loaded dynamically via `process.env.GEMINI_MODEL`, defaulting to `gemini-1.5-flash`.
 * **JSON Mode**: Forced output to `responseMimeType: "application/json"` at the model initialization level to speed up token generation and ensure parsing reliability.
 * **Auto-Retry & Backoff**: The `safeGenerateContent` wrapper in `server/src/services/ai.js` catches temporary `503 Service Unavailable` or `429 Rate Limit` errors and automatically retries with exponential backoff (e.g., 1s, then 2s, then 4s).
 * **Parallel DB Writes**: Task generation inserts cards concurrently using `Promise.all` to minimize round-trip database latency.
