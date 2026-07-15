@@ -53,8 +53,18 @@ jobs:
             # Extract new deployment archive
             unzip -o deploy.zip && rm deploy.zip
             
-            # Reorganize directory structure for docker-compose context
-            mkdir -p server && mv src package.json package-lock.json Dockerfile server/
-            
             # Restart docker container services
             docker compose -f docker-compose.prod.yml up -d --build
+            
+            # Wait for backend and database to be fully up
+            echo "Waiting for services to spin up..."
+            sleep 8
+            
+            # Check if database is already initialized by checking if users table exists
+            if ! docker compose -f docker-compose.prod.yml exec -T database psql -U postgres -d kanboard -c "SELECT 1 FROM users LIMIT 1;" >/dev/null 2>&1; then
+              echo "⚠️ Database not initialized. Running database seed..."
+              docker compose -f docker-compose.prod.yml exec -T backend npm run seed
+              echo "✅ Database initialized and seeded successfully."
+            else
+              echo "✅ Database is already initialized. Skipping seed."
+            fi
